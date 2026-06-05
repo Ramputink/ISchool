@@ -8,6 +8,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import VoiceVisualizer from "./VoiceVisualizer";
 
+/** Identidad mostrable; usada para cambiar avatar/nombre cuando el orquestador transfiere. */
+export type Speaker = {
+  id: string;
+  name: string;
+  title?: string;
+  avatar: string;
+  accent?: string;
+  /** Palabras (en minúscula) que, si aparecen en lo que dice el agente, activan a este hablante. */
+  match: string[];
+};
+
 export type VoiceSessionProps = {
   agentId: string;
   name: string;
@@ -17,6 +28,8 @@ export type VoiceSessionProps = {
   accent?: string;
   /** Variables dinámicas que se inyectan en el prompt del agente ({{student_name}}, {{interests}}, ...) */
   dynamicVariables?: Record<string, string | number | boolean>;
+  /** Si se provee, el avatar/nombre cambia automáticamente al detectar transferencias por el contenido. */
+  speakers?: Speaker[];
   onEnd?: () => void;
 };
 
@@ -39,18 +52,43 @@ function VoiceSessionInner({
   quote,
   accent = "#c0c1ff",
   dynamicVariables,
+  speakers,
   onEnd,
 }: VoiceSessionProps) {
   const [lines, setLines] = useState<Line[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Hablante activo detectado por las transferencias (null = el agente base).
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const speakersRef = useRef<Speaker[] | undefined>(speakers);
+  speakersRef.current = speakers;
   const missingAgent = !agentId || agentId.startsWith("REEMPLAZAR");
 
   const conv = useConversation({
-    onMessage: ({ message, source }) =>
-      setLines((prev) => [...prev.slice(-7), { role: source, text: message }]),
+    onMessage: ({ message, source }) => {
+      setLines((prev) => [...prev.slice(-7), { role: source, text: message }]);
+      // Detecta quién habla ahora a partir de lo que dice el agente.
+      const list = speakersRef.current;
+      if (source === "ai" && list?.length) {
+        const text = message.toLowerCase();
+        const hit = list.find((s) => s.match.some((m) => text.includes(m)));
+        if (hit) setActiveId((prev) => (prev === hit.id ? prev : hit.id));
+      }
+    },
     onError: (m) => setError(typeof m === "string" ? m : "Error de conexión"),
-    onDisconnect: () => setLines([]),
+    onDisconnect: () => {
+      setLines([]);
+      setActiveId(null);
+    },
   });
+
+  // Identidad mostrada: el hablante activo, o el agente base.
+  const active = speakers?.find((s) => s.id === activeId);
+  const display = {
+    name: active?.name ?? name,
+    title: active?.title ?? title,
+    avatar: active?.avatar ?? avatar,
+    accent: active?.accent ?? accent,
+  };
 
   const status = conv.status; // "disconnected" | "connecting" | "connected" | "error"
   const connected = status === "connected";
@@ -111,44 +149,46 @@ function VoiceSessionInner({
 
   return (
     <section className="flex flex-col items-center justify-center gap-xl px-gutter py-xl">
-      {/* Avatar con glow */}
+      {/* Avatar con glow — cambia automáticamente al transferir a otro hablante */}
       <div className="relative group mt-md">
         <div
-          className="absolute inset-0 rounded-full blur-3xl opacity-30"
-          style={{ backgroundColor: accent }}
+          className="absolute inset-0 rounded-full blur-3xl opacity-30 transition-colors duration-500"
+          style={{ backgroundColor: display.accent }}
         />
         <div
           className={`absolute inset-[-6px] rounded-full border-2 transition-opacity duration-700 ${
             connected ? "opacity-100 animate-pulse" : "opacity-0"
           }`}
-          style={{ borderColor: `${accent}88` }}
+          style={{ borderColor: `${display.accent}88` }}
         />
         <div
-          className="relative w-40 h-40 rounded-full border-2 p-1 glow-avatar overflow-hidden"
-          style={{ borderColor: `${accent}66` }}
+          className="relative w-40 h-40 rounded-full border-2 p-1 glow-avatar overflow-hidden transition-colors duration-500"
+          style={{ borderColor: `${display.accent}66` }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={avatar}
-            alt={name}
-            className={`w-full h-full object-cover rounded-full transition-all duration-700 ${
+            key={display.avatar}
+            src={display.avatar}
+            alt={display.name}
+            className={`w-full h-full object-cover rounded-full animate-fade-in transition-all duration-700 ${
               connected ? "grayscale-0 scale-105" : "grayscale"
             }`}
           />
         </div>
         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 glass-panel px-lg py-1 rounded-full whitespace-nowrap z-10">
           <span
-            className="font-headline-md text-body-md font-semibold tracking-wide"
-            style={{ color: accent }}
+            key={display.name}
+            className="font-headline-md text-body-md font-semibold tracking-wide animate-fade-in"
+            style={{ color: display.accent }}
           >
-            {name}
+            {display.name}
           </span>
         </div>
       </div>
 
-      {title && (
+      {display.title && (
         <p className="text-on-surface-variant text-label-sm font-label-sm uppercase tracking-widest mt-xs">
-          {title}
+          {display.title}
         </p>
       )}
 
@@ -178,7 +218,7 @@ function VoiceSessionInner({
         <div
           className="absolute top-0 left-0 right-0 h-[2px] opacity-60"
           style={{
-            background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+            background: `linear-gradient(90deg, transparent, ${display.accent}, transparent)`,
           }}
         />
         <p
@@ -247,7 +287,7 @@ function VoiceSessionInner({
               ? "bg-error text-on-error"
               : "bg-primary-container text-on-primary-container"
           }`}
-          style={connected ? {} : { boxShadow: `0 8px 32px ${accent}40` }}
+          style={connected ? {} : { boxShadow: `0 8px 32px ${display.accent}40` }}
         >
           <span className="material-symbols-outlined text-xl">
             {connected ? "call_end" : connecting ? "sync" : "mic"}

@@ -2,7 +2,7 @@
 // DUEÑO: Álvaro (Bloque 1 — Coach personal inspiracional).
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
-import VoiceSession from "@/components/VoiceSession";
+import VoiceSession, { type Speaker } from "@/components/VoiceSession";
 import { ELEVENLABS } from "@/lib/elevenlabs";
 import { addInterest, removeInterest, setName, loadProfile } from "@/lib/profile";
 import type { InterestCategory } from "@/lib/profile";
@@ -22,6 +22,37 @@ const INTEREST_CHIPS: { label: string; topic: string; category: InterestCategory
   { label: "Astronomía", topic: "astronomía", category: "ciencia", emoji: "🌌" },
   { label: "Emprender", topic: "emprender", category: "negocios", emoji: "🚀" },
   { label: "Creatividad", topic: "creatividad", category: "arte", emoji: "✨" },
+];
+
+// Avatar del guía Quriuos y del orientador (mismos que en sus páginas).
+const GUIDE_AVATAR =
+  "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?q=80&w=640&auto=format&fit=crop";
+const ORIENTADOR_AVATAR =
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=640&auto=format&fit=crop";
+
+// Alias por personaje para detectar la transferencia desde lo que dice el agente.
+const ALIASES: Record<string, string[]> = {
+  hawking: ["hawking", "stephen"],
+  jobs: ["steve jobs", "jobs"],
+  musk: ["elon", "musk"],
+  cr7: ["cristiano", "ronaldo", "cr7"],
+  messi: ["messi", "lionel", "leo messi"],
+  taylor: ["taylor", "swift"],
+  ibai: ["ibai"],
+};
+
+// Hablantes posibles en la conversación única (orquestador + referentes + orientador).
+const SPEAKERS: Speaker[] = [
+  { id: "quriuos", name: "Quriuos", title: "Tu guía", avatar: GUIDE_AVATAR, accent: "#c0c1ff", match: ["quriuos"] },
+  ...CHARACTERS.map((c) => ({
+    id: c.id,
+    name: c.name,
+    title: c.title,
+    avatar: c.avatar,
+    accent: c.accent,
+    match: ALIASES[c.id] ?? [c.name.toLowerCase()],
+  })),
+  { id: "orientador", name: "Orientador", title: "Coach vocacional", avatar: ORIENTADOR_AVATAR, accent: "#ffb783", match: ["orientador", "orientación", "vocacional"] },
 ];
 
 export default function CoachPage() {
@@ -117,9 +148,10 @@ export default function CoachPage() {
         agentId={ELEVENLABS.coachAgentId}
         name="Quriuos"
         title="Tu guía · los referentes se unen solos"
-        avatar="https://images.unsplash.com/photo-1531123897727-8f129e1688ce?q=80&w=640&auto=format&fit=crop"
+        avatar={GUIDE_AVATAR}
         quote="¡Hola! Cuéntame, ¿qué es eso que harías durante horas sin aburrirte?"
         accent="#c0c1ff"
+        speakers={SPEAKERS}
         dynamicVariables={{
           student_name: nameInput.trim() || "estudiante",
           interests: Array.from(selected).join(", ") || "aún sin definir",
