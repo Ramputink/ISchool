@@ -69,10 +69,12 @@ function transferTool(transfers) {
   };
 }
 
-async function patchAgent(agentId, prompt, transfers) {
+async function patchAgent(agentId, prompt, transfers, firstMessage) {
   const agentPrompt = { built_in_tools: { transfer_to_agent: transferTool(transfers) } };
   if (prompt) agentPrompt.prompt = prompt;
-  const body = { conversation_config: { agent: { prompt: agentPrompt } } };
+  const agent = { prompt: agentPrompt };
+  if (firstMessage) agent.first_message = firstMessage;
+  const body = { conversation_config: { agent } };
 
   const res = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}`, {
     method: "PATCH",
@@ -92,8 +94,9 @@ async function patchAgent(agentId, prompt, transfers) {
   // 1) Orquestador: nuevo prompt + transferencias hacia todos los destinos.
   const md = fs.readFileSync(path.join(AGENTS_DIR, "orquestador.md"), "utf8");
   const orchPrompt = block(md, "System prompt");
+  const orchFirst = block(md, "First message");
   try {
-    await patchAgent(ORCH, orchPrompt, TRANSFERS.filter((t) => t.id));
+    await patchAgent(ORCH, orchPrompt, TRANSFERS.filter((t) => t.id), orchFirst);
     console.log(`✓ Orquestador configurado (${TRANSFERS.filter((t) => t.id).length} transferencias)`);
   } catch (e) {
     console.error(`✗ Orquestador — ${e.message}`);
