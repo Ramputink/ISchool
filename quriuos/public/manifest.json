@@ -1,0 +1,57 @@
+{
+  "name": "Quriuos",
+  "short_name": "Quriuos",
+  "description": "Plataforma de voz con IA para adolescentes. Descubre tus intereses, conversa con referentes que te inspiran y encuentra tu camino.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#13131b",
+  "background_color": "#13131b",
+  "lang": "es",
+  "categories": ["education", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Coach personal",
+      "short_name": "Coach",
+      "description": "Habla con tu coach de IA",
+      "url": "/coach",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Personajes",
+      "short_name": "Personajes",
+      "description": "Conversa con referentes inspiradores",
+      "url": "/personajes",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Orientación vocacional",
+      "short_name": "Futuro",
+      "description": "Descubre tu camino profesional",
+      "url": "/vocacional",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    }
+  ]
+}

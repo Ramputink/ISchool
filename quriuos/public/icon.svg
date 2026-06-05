@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Fondo circular sólido (para maskable) -->
+  <rect width="512" height="512" rx="120" fill="#13131b"/>
+
+  <!-- Gradiente radial de fondo sutil -->
+  <defs>
+    <radialGradient id="bg-glow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%"   stop-color="#494bd6" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#13131b" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dot-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#c0c1ff" stop-opacity="1"/>
+      <stop offset="70%"  stop-color="#c0c1ff" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#c0c1ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow-filter" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Halo de fondo -->
+  <circle cx="256" cy="240" r="200" fill="url(#bg-glow)"/>
+
+  <!-- Círculo exterior de la Q -->
+  <circle
+    cx="248" cy="238"
+    r="108"
+    stroke="#c0c1ff"
+    stroke-width="22"
+    stroke-linecap="round"
+    fill="none"
+    filter="url(#glow-filter)"
+  />
+
+  <!-- Cola descendente de la Q -->
+  <line
+    x1="323" y1="313"
+    x2="378" y2="368"
+    stroke="#c0c1ff"
+    stroke-width="24"
+    stroke-linecap="round"
+    filter="url(#glow-filter)"
+  />
+
+  <!-- Punto interior — metáfora de "curiosidad" / micrófono -->
+  <circle
+    cx="248" cy="238"
+    r="30"
+    fill="url(#dot-glow)"
+    filter="url(#glow-filter)"
+  />
+
+  <!-- Acento cian sutil en la parte superior del círculo -->
+  <path
+    d="M 175 155 A 108 108 0 0 1 321 155"
+    stroke="#4cd7f6"
+    stroke-width="6"
+    stroke-linecap="round"
+    fill="none"
+    opacity="0.6"
+  />
+</svg>
