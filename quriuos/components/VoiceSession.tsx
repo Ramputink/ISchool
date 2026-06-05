@@ -80,7 +80,17 @@ function VoiceSessionInner({
       return;
     }
     try {
-      conv.startSession({ agentId, connectionType: "webrtc", dynamicVariables });
+      // Pide un token de conversación al servidor (la API key nunca sale al cliente).
+      const res = await fetch(
+        `/api/elevenlabs-token?agentId=${encodeURIComponent(agentId)}`,
+      );
+      if (!res.ok) throw new Error("token");
+      const { token } = await res.json();
+      conv.startSession({
+        conversationToken: token,
+        connectionType: "webrtc",
+        dynamicVariables,
+      });
     } catch {
       setError("No se pudo iniciar la conversación. Inténtalo de nuevo.");
     }
