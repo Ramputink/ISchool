@@ -28,11 +28,19 @@ export type CharacterChat = {
   summary: string; // resumen corto de lo que se habló
 };
 
+export type Msg = {
+  role: "user" | "ai";
+  text: string;
+  speaker?: string; // nombre del hablante (Quriuos, Hawking, ...)
+  ts: string;
+};
+
 export type StudentProfile = {
   name: string;
   interests: Interest[];
   chats: CharacterChat[];
   vocationalNotes: string[]; // lo que rellena el bloque 3
+  transcript: Msg[]; // memoria de todo lo hablado
   updatedAt: string;
 };
 
@@ -44,6 +52,7 @@ export function emptyProfile(): StudentProfile {
     interests: [],
     chats: [],
     vocationalNotes: [],
+    transcript: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -108,6 +117,32 @@ export function addVocationalNote(note: string): StudentProfile {
   p.vocationalNotes.push(note);
   saveProfile(p);
   return p;
+}
+
+// ---- Memoria de la conversación ----
+export function addMessage(m: Omit<Msg, "ts">): StudentProfile {
+  const p = loadProfile();
+  p.transcript.push({ ...m, ts: new Date().toISOString() });
+  // Cap para no llenar localStorage en exceso.
+  if (p.transcript.length > 200) p.transcript = p.transcript.slice(-200);
+  saveProfile(p);
+  return p;
+}
+
+// Resumen compacto para dar "memoria" al agente vía variables dinámicas.
+export function buildRecap(p: StudentProfile = loadProfile()): string {
+  const parts: string[] = [];
+  if (p.name) parts.push(`El estudiante se llama ${p.name}.`);
+  if (p.interests.length)
+    parts.push(`Intereses detectados: ${p.interests.map((i) => i.topic).join(", ")}.`);
+  if (p.chats.length)
+    parts.push(`Ya ha conversado con: ${p.chats.map((c) => c.character).join(", ")}.`);
+  const last = p.transcript
+    .slice(-6)
+    .map((m) => `${m.role === "user" ? "Estudiante" : m.speaker || "Quriuos"}: ${m.text}`)
+    .join(" / ");
+  if (last) parts.push(`Últimos mensajes: ${last}`);
+  return parts.join(" ") || "Es la primera conversación; aún no hay contexto previo.";
 }
 
 export function resetProfile(): void {

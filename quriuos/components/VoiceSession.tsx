@@ -1,21 +1,20 @@
 "use client";
-// DUEÑO: Álvaro (bloques 1 y 2). Experiencia de voz inmersiva con el SDK de ElevenLabs.
-// Integración real vía @elevenlabs/react (useConversation dentro de ConversationProvider):
-//   - el visualizador reacciona al audio REAL del agente
-//   - la transcripción sale de eventos onMessage reales
-//   - los botones mute / terminar controlan la conversación de verdad
+// Chatbot de voz único de Quriuos (SDK @elevenlabs/react).
+//  - una sola conversación; el avatar/nombre cambia solo al transferir a un referente
+//  - el visualizador reacciona al audio real
+//  - log de chat con memoria persistente (localStorage) de todo lo hablado
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import VoiceVisualizer from "./VoiceVisualizer";
+import { addMessage, loadProfile } from "@/lib/profile";
 
-/** Identidad mostrable; usada para cambiar avatar/nombre cuando el orquestador transfiere. */
 export type Speaker = {
   id: string;
   name: string;
   title?: string;
   avatar: string;
   accent?: string;
-  /** Palabras (en minúscula) que, si aparecen en lo que dice el agente, activan a este hablante. */
+  /** Palabras (minúscula) que, si aparecen en lo que dice el agente, activan a este hablante. */
   match: string[];
 };
 
@@ -26,17 +25,16 @@ export type VoiceSessionProps = {
   avatar: string;
   quote?: string;
   accent?: string;
-  /** Variables dinámicas que se inyectan en el prompt del agente ({{student_name}}, {{interests}}, ...) */
   dynamicVariables?: Record<string, string | number | boolean>;
-  /** Si se provee, el avatar/nombre cambia automáticamente al detectar transferencias por el contenido. */
   speakers?: Speaker[];
+  /** Persistir la conversación en localStorage y sembrar el historial al cargar. */
+  persist?: boolean;
   onEnd?: () => void;
 };
 
-type Line = { role: "user" | "ai"; text: string };
+type ChatMsg = { role: "user" | "ai"; text: string; speaker?: string };
 
 export default function VoiceSession(props: VoiceSessionProps) {
-  // useConversation debe vivir dentro de un ConversationProvider.
   return (
     <ConversationProvider>
       <VoiceSessionInner {...props} />
@@ -53,35 +51,56 @@ function VoiceSessionInner({
   accent = "#c0c1ff",
   dynamicVariables,
   speakers,
+  persist = false,
   onEnd,
 }: VoiceSessionProps) {
-  const [lines, setLines] = useState<Line[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Hablante activo detectado por las transferencias (null = el agente base).
   const [activeId, setActiveId] = useState<string | null>(null);
+
   const speakersRef = useRef<Speaker[] | undefined>(speakers);
   speakersRef.current = speakers;
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = activeId;
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+
   const missingAgent = !agentId || agentId.startsWith("REEMPLAZAR");
+
+  // Sembrar historial persistido (en efecto → sin mismatch de hidratación).
+  useEffect(() => {
+    if (persist) {
+      const t = loadProfile().transcript;
+      if (t.length)
+        setMessages(t.map((m) => ({ role: m.role, text: m.text, speaker: m.speaker })));
+    }
+  }, [persist]);
 
   const conv = useConversation({
     onMessage: ({ message, source }) => {
-      setLines((prev) => [...prev.slice(-7), { role: source, text: message }]);
-      // Detecta quién habla ahora a partir de lo que dice el agente.
-      const list = speakersRef.current;
-      if (source === "ai" && list?.length) {
-        const text = message.toLowerCase();
-        const hit = list.find((s) => s.match.some((m) => text.includes(m)));
-        if (hit) setActiveId((prev) => (prev === hit.id ? prev : hit.id));
+      let speaker: string | undefined;
+      if (source === "ai") {
+        const list = speakersRef.current;
+        const hit = list?.find((s) => s.match.some((m) => message.toLowerCase().includes(m)));
+        if (hit) {
+          setActiveId((prev) => (prev === hit.id ? prev : hit.id));
+          speaker = hit.name;
+        } else {
+          speaker = list?.find((s) => s.id === activeIdRef.current)?.name ?? name;
+        }
       }
+      setMessages((prev) => [...prev, { role: source, text: message, speaker }]);
+      if (persistRef.current) addMessage({ role: source, text: message, speaker });
     },
     onError: (m) => setError(typeof m === "string" ? m : "Error de conexión"),
-    onDisconnect: () => {
-      setLines([]);
-      setActiveId(null);
-    },
+    onDisconnect: () => setActiveId(null),
   });
 
-  // Identidad mostrada: el hablante activo, o el agente base.
+  const status = conv.status;
+  const connected = status === "connected";
+  const connecting = status === "connecting";
+
+  // Identidad mostrada (hablante activo o agente base).
   const active = speakers?.find((s) => s.id === activeId);
   const display = {
     name: active?.name ?? name,
@@ -90,45 +109,37 @@ function VoiceSessionInner({
     accent: active?.accent ?? accent,
   };
 
-  const status = conv.status; // "disconnected" | "connecting" | "connected" | "error"
-  const connected = status === "connected";
-  const connecting = status === "connecting";
+  // Auto-scroll al último mensaje.
+  const logRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
 
-  // Cierra la sesión si el componente se desmonta (cambiar de personaje, navegar).
+  // Cerrar sesión al desmontar.
   const convRef = useRef(conv);
   convRef.current = conv;
-  useEffect(() => {
-    return () => {
-      try {
-        convRef.current.endSession();
-      } catch {
-        /* noop */
-      }
-    };
+  useEffect(() => () => {
+    try {
+      convRef.current.endSession();
+    } catch {
+      /* noop */
+    }
   }, []);
 
   const start = useCallback(async () => {
     setError(null);
     if (missingAgent) return;
     try {
-      // Pide permiso de micrófono antes de conectar (mejor UX en el error).
       await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       setError("Necesito permiso de micrófono para poder hablar contigo.");
       return;
     }
     try {
-      // Pide un token de conversación al servidor (la API key nunca sale al cliente).
-      const res = await fetch(
-        `/api/elevenlabs-token?agentId=${encodeURIComponent(agentId)}`,
-      );
+      const res = await fetch(`/api/elevenlabs-token?agentId=${encodeURIComponent(agentId)}`);
       if (!res.ok) throw new Error("token");
       const { token } = await res.json();
-      conv.startSession({
-        conversationToken: token,
-        connectionType: "webrtc",
-        dynamicVariables,
-      });
+      conv.startSession({ conversationToken: token, connectionType: "webrtc", dynamicVariables });
     } catch {
       setError("No se pudo iniciar la conversación. Inténtalo de nuevo.");
     }
@@ -139,166 +150,146 @@ function VoiceSessionInner({
     onEnd?.();
   }, [conv, onEnd]);
 
-  // Texto de la transcripción: última línea real, o la cita inicial.
-  const lastLine = lines[lines.length - 1];
-  const transcript = lastLine
-    ? lastLine.text
-    : quote
-      ? `"${quote}"`
-      : "Pulsa «Empezar a hablar» para comenzar la sesión.";
-
   return (
-    <section className="flex flex-col items-center justify-center gap-xl px-gutter py-xl">
-      {/* Avatar con glow — cambia automáticamente al transferir a otro hablante */}
-      <div className="relative group mt-md">
-        <div
-          className="absolute inset-0 rounded-full blur-3xl opacity-30 transition-colors duration-500"
-          style={{ backgroundColor: display.accent }}
-        />
-        <div
-          className={`absolute inset-[-6px] rounded-full border-2 transition-opacity duration-700 ${
-            connected ? "opacity-100 animate-pulse" : "opacity-0"
-          }`}
-          style={{ borderColor: `${display.accent}88` }}
-        />
-        <div
-          className="relative w-40 h-40 rounded-full border-2 p-1 glow-avatar overflow-hidden transition-colors duration-500"
-          style={{ borderColor: `${display.accent}66` }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            key={display.avatar}
-            src={display.avatar}
-            alt={display.name}
-            className={`w-full h-full object-cover rounded-full animate-fade-in transition-all duration-700 ${
-              connected ? "grayscale-0 scale-105" : "grayscale"
-            }`}
+    <section className="flex flex-col h-full gap-md px-gutter pt-md pb-md">
+      {/* Hero: hablante activo + visualizador */}
+      <div className="flex flex-col items-center gap-sm shrink-0">
+        <div className="relative">
+          <div
+            className="absolute inset-0 rounded-full blur-2xl opacity-30 transition-colors duration-500"
+            style={{ backgroundColor: display.accent }}
           />
+          <div
+            className={`absolute inset-[-5px] rounded-full border-2 transition-opacity duration-700 ${
+              connected ? "opacity-100 animate-pulse" : "opacity-0"
+            }`}
+            style={{ borderColor: `${display.accent}88` }}
+          />
+          <div
+            className="relative w-28 h-28 rounded-full border-2 p-1 glow-avatar overflow-hidden transition-colors duration-500"
+            style={{ borderColor: `${display.accent}66` }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={display.avatar}
+              src={display.avatar}
+              alt={display.name}
+              className={`w-full h-full object-cover rounded-full animate-fade-in transition-all duration-700 ${
+                connected ? "grayscale-0" : "grayscale"
+              }`}
+            />
+          </div>
         </div>
-        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 glass-panel px-lg py-1 rounded-full whitespace-nowrap z-10">
-          <span
+        <div className="text-center">
+          <p
             key={display.name}
             className="font-headline-md text-body-md font-semibold tracking-wide animate-fade-in"
             style={{ color: display.accent }}
           >
             {display.name}
-          </span>
+          </p>
+          {connected ? (
+            <p className="text-on-surface-variant text-label-sm font-label-sm uppercase tracking-widest flex items-center justify-center gap-xs mt-0.5">
+              <span className="material-symbols-outlined" style={{ fontSize: "13px" }}>
+                {conv.isSpeaking ? "graphic_eq" : "hearing"}
+              </span>
+              {conv.isSpeaking ? "Hablando…" : "Escuchando…"}
+            </p>
+          ) : (
+            display.title && (
+              <p className="text-on-surface-variant text-label-sm font-label-sm uppercase tracking-widest mt-0.5">
+                {connecting ? "Conectando…" : display.title}
+              </p>
+            )
+          )}
         </div>
-      </div>
-
-      {display.title && (
-        <p className="text-on-surface-variant text-label-sm font-label-sm uppercase tracking-widest mt-xs">
-          {display.title}
-        </p>
-      )}
-
-      {/* Estado de la conexión */}
-      {connecting && (
-        <p className="text-primary text-label-sm font-label-sm uppercase tracking-widest animate-pulse">
-          Conectando…
-        </p>
-      )}
-      {connected && (
-        <p className="text-secondary text-label-sm font-label-sm uppercase tracking-widest flex items-center gap-xs">
-          <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
-            {conv.isSpeaking ? "graphic_eq" : "hearing"}
-          </span>
-          {conv.isSpeaking ? "Hablando…" : "Escuchando…"}
-        </p>
-      )}
-
-      {/* Visualizador alimentado con el audio real del agente */}
-      <VoiceVisualizer
-        active={connected}
-        getFrequency={connected ? conv.getOutputByteFrequencyData : undefined}
-      />
-
-      {/* Transcripción real */}
-      <div className="w-full glass-panel rounded-xl p-lg min-h-[96px] flex items-center justify-center text-center relative overflow-hidden">
-        <div
-          className="absolute top-0 left-0 right-0 h-[2px] opacity-60"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${display.accent}, transparent)`,
-          }}
+        <VoiceVisualizer
+          active={connected}
+          bars={32}
+          getFrequency={connected ? conv.getOutputByteFrequencyData : undefined}
         />
-        <p
-          className={`font-body-lg text-body-md leading-relaxed transition-all duration-300 ${
-            lastLine?.role === "user"
-              ? "text-on-surface-variant"
-              : "text-on-surface italic opacity-90"
-          }`}
-        >
-          {lastLine?.role === "user" ? `Tú: ${transcript}` : transcript}
-        </p>
       </div>
 
-      {/* Aviso si falta configurar el agente */}
+      {/* Log de chat con memoria */}
+      <div
+        ref={logRef}
+        className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-sm py-sm scrollbar-hide"
+      >
+        {messages.length === 0 && (
+          <div className="m-auto text-center max-w-xs glass-panel rounded-xl p-md">
+            <p className="text-on-surface font-body-lg text-body-md italic opacity-90 leading-relaxed">
+              {quote ? `"${quote}"` : "Pulsa el micrófono para empezar a hablar."}
+            </p>
+          </div>
+        )}
+        {messages.map((m, i) =>
+          m.role === "user" ? (
+            <div key={i} className="self-end max-w-[80%] animate-fade-up">
+              <div className="bg-primary-container/90 text-on-primary-container rounded-2xl rounded-br-sm px-md py-sm text-body-md">
+                {m.text}
+              </div>
+            </div>
+          ) : (
+            <div key={i} className="self-start max-w-[85%] animate-fade-up">
+              {m.speaker && (
+                <p className="text-label-sm font-label-sm text-on-surface-variant mb-0.5 ml-1">
+                  {m.speaker}
+                </p>
+              )}
+              <div className="glass-panel rounded-2xl rounded-bl-sm px-md py-sm text-on-surface text-body-md">
+                {m.text}
+              </div>
+            </div>
+          ),
+        )}
+      </div>
+
+      {/* Avisos */}
       {missingAgent && (
-        <div className="w-full glass-panel rounded-xl p-md flex items-start gap-sm">
-          <span
-            className="material-symbols-outlined text-tertiary shrink-0 mt-0.5"
-            aria-hidden
-          >
+        <div className="glass-panel rounded-xl p-sm flex items-start gap-sm text-sm text-on-surface-variant shrink-0">
+          <span className="material-symbols-outlined text-tertiary shrink-0" aria-hidden>
             warning
           </span>
-          <div className="text-sm text-on-surface-variant leading-relaxed">
-            <span className="text-on-surface font-semibold">
-              Falta el agent-id de ElevenLabs
-            </span>{" "}
-            para <span className="text-primary font-medium">{name}</span>. Créalo
-            en el dashboard y añádelo a{" "}
-            <code className="text-primary text-xs bg-surface-container px-1 py-0.5 rounded">
-              .env.local
-            </code>{" "}
-            (ver <code className="text-primary text-xs">GUIA_ELEVENLABS.md</code>).
-          </div>
+          <span>
+            Falta configurar el agent-id de ElevenLabs. Revisa{" "}
+            <code className="text-primary text-xs">.env.local</code> (ver GUIA_ELEVENLABS.md).
+          </span>
         </div>
       )}
-
-      {/* Mensaje de error */}
       {error && !missingAgent && (
-        <div className="w-full glass-panel rounded-xl p-md flex items-start gap-sm">
-          <span className="material-symbols-outlined text-error shrink-0 mt-0.5" aria-hidden>
+        <div className="glass-panel rounded-xl p-sm flex items-start gap-sm text-sm text-on-surface-variant shrink-0">
+          <span className="material-symbols-outlined text-error shrink-0" aria-hidden>
             error
           </span>
-          <p className="text-sm text-on-surface-variant leading-relaxed">{error}</p>
+          <span>{error}</span>
         </div>
       )}
 
       {/* Controles */}
-      <div className="flex items-center justify-center gap-md w-full">
+      <div className="flex items-center justify-center gap-md shrink-0">
         {connected && (
           <button
             onClick={() => conv.setMuted(!conv.isMuted)}
             aria-label={conv.isMuted ? "Activar micrófono" : "Silenciar micrófono"}
-            className="w-12 h-12 flex items-center justify-center rounded-full glass-panel border border-white/10 text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all active:scale-90"
+            className="w-12 h-12 flex items-center justify-center rounded-full glass-panel border border-white/10 text-on-surface-variant hover:text-on-surface transition-all active:scale-90"
           >
             <span className="material-symbols-outlined text-xl">
               {conv.isMuted ? "mic_off" : "mic"}
             </span>
           </button>
         )}
-
         <button
           onClick={connected ? stop : start}
           disabled={connecting || missingAgent}
-          className={`flex items-center gap-sm px-xl py-md rounded-full font-headline-md text-body-md font-bold transition-all duration-300 active:scale-95 shadow-lg disabled:opacity-50 disabled:active:scale-100 ${
-            connected
-              ? "bg-error text-on-error"
-              : "bg-primary-container text-on-primary-container"
+          className={`flex items-center gap-sm px-xl py-md rounded-full font-headline-md text-body-md font-bold transition-all duration-300 active:scale-95 shadow-lg disabled:opacity-50 ${
+            connected ? "bg-error text-on-error" : "bg-primary-container text-on-primary-container"
           }`}
           style={connected ? {} : { boxShadow: `0 8px 32px ${display.accent}40` }}
         >
           <span className="material-symbols-outlined text-xl">
             {connected ? "call_end" : connecting ? "sync" : "mic"}
           </span>
-          <span>
-            {connected
-              ? "Terminar sesión"
-              : connecting
-                ? "Conectando…"
-                : "Empezar a hablar"}
-          </span>
+          <span>{connected ? "Terminar" : connecting ? "Conectando…" : "Empezar a hablar"}</span>
         </button>
       </div>
     </section>
