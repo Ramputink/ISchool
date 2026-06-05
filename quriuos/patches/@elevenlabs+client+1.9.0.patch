@@ -1,0 +1,18 @@
+diff --git a/node_modules/@elevenlabs/client/dist/BaseConversation.js b/node_modules/@elevenlabs/client/dist/BaseConversation.js
+index 9a10aa6..b55a91f 100644
+--- a/node_modules/@elevenlabs/client/dist/BaseConversation.js
++++ b/node_modules/@elevenlabs/client/dist/BaseConversation.js
+@@ -255,6 +255,13 @@ export class BaseConversation {
+         }
+     }
+     handleErrorEvent(event) {
++        // Quriuos patch: algunos eventos "error" llegan sin error_event (p.ej. durante
++        // transferencias de agente). Sin esta guarda, el SDK lanza una excepción no
++        // capturada. La ignoramos de forma segura para no romper la sesión.
++        if (!event || !event.error_event) {
++            if (this.options.onDebug) this.options.onDebug(event);
++            return;
++        }
+         const errorType = event.error_event.error_type;
+         const message = event.error_event.message || event.error_event.reason || "Unknown error";
+         if (errorType === "max_duration_exceeded") {
