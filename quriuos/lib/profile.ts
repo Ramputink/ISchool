@@ -35,6 +35,33 @@ export type Msg = {
   ts: string;
 };
 
+// ── Neuro-tutor (SpaceForEdu) — superset del perfil ────────────────────────
+// Ver plan: se extiende StudentProfile con campos opcionales para no romper
+// el flujo Quriuos existente. La forma sobrevive la migración localStorage→DB.
+
+export type Gender = "boy" | "girl" | "unspecified";
+
+export type Subject = {
+  name: string; // "Matemáticas", "Lengua", ...
+  strength: 1 | 2 | 3 | 4 | 5; // 1 = flojo, 5 = fuerte
+};
+
+export type TutorManner = "playful" | "warm" | "coach" | "calm";
+
+export type TutorConfig = {
+  personaId: string; // id de lib/tutors.ts
+  voiceId?: string; // voz ElevenLabs asignada
+  manner: TutorManner;
+  displayName: string; // el niño puede nombrar a su profe
+  accent?: string; // color de acento para la UI
+  avatar?: string; // url del avatar elegido
+};
+
+export type ParentConsent = {
+  email: string;
+  consentAt: string; // ISO — el micro no se activa sin esto
+};
+
 export type StudentProfile = {
   name: string;
   interests: Interest[];
@@ -42,6 +69,20 @@ export type StudentProfile = {
   vocationalNotes: string[]; // lo que rellena el bloque 3
   transcript: Msg[]; // memoria de todo lo hablado
   updatedAt: string;
+
+  // ── Campos neuro-tutor (opcionales, MVP SpaceForEdu) ──
+  age?: number;
+  gender?: Gender;
+  gradeLevel?: string; // "5º Primaria", "1º Bachillerato"
+  subjects?: Subject[]; // fuertes y débiles
+  tutor?: TutorConfig; // persona/voz/manner elegidos
+  weekRecap?: string; // resumen semanal generado
+  wins?: string[]; // logros para "Mi Semana"
+  flags?: {
+    needsHumanTutor?: string[]; // asignaturas atascadas → puente a T2
+    safetyEvent?: boolean;
+  };
+  parent?: ParentConsent;
 };
 
 const KEY = "quriuos_profile";
@@ -54,6 +95,9 @@ export function emptyProfile(): StudentProfile {
     vocationalNotes: [],
     transcript: [],
     updatedAt: new Date().toISOString(),
+    subjects: [],
+    wins: [],
+    flags: {},
   };
 }
 
@@ -132,7 +176,16 @@ export function addMessage(m: Omit<Msg, "ts">): StudentProfile {
 // Resumen compacto para dar "memoria" al agente vía variables dinámicas.
 export function buildRecap(p: StudentProfile = loadProfile()): string {
   const parts: string[] = [];
-  if (p.name) parts.push(`El estudiante se llama ${p.name}.`);
+  if (p.name) {
+    const bits = [p.name];
+    if (p.age) bits.push(`${p.age} años`);
+    if (p.gradeLevel) bits.push(p.gradeLevel);
+    parts.push(`El estudiante se llama ${bits.join(", ")}.`);
+  }
+  const weak = weakSubjects(p);
+  const strong = strongSubjects(p);
+  if (strong.length) parts.push(`Se le da bien: ${strong.join(", ")}.`);
+  if (weak.length) parts.push(`Le cuesta más: ${weak.join(", ")} (ahí necesita más apoyo).`);
   if (p.interests.length)
     parts.push(`Intereses detectados: ${p.interests.map((i) => i.topic).join(", ")}.`);
   if (p.chats.length)
@@ -143,6 +196,79 @@ export function buildRecap(p: StudentProfile = loadProfile()): string {
     .join(" / ");
   if (last) parts.push(`Últimos mensajes: ${last}`);
   return parts.join(" ") || "Es la primera conversación; aún no hay contexto previo.";
+}
+
+// ── Helpers y setters del neuro-tutor (SpaceForEdu) ─────────────────────────
+
+export function weakSubjects(p: StudentProfile = loadProfile()): string[] {
+  return (p.subjects ?? []).filter((s) => s.strength <= 2).map((s) => s.name);
+}
+
+export function strongSubjects(p: StudentProfile = loadProfile()): string[] {
+  return (p.subjects ?? []).filter((s) => s.strength >= 4).map((s) => s.name);
+}
+
+/** Consentimiento parental: el micro no debe activarse sin esto. */
+export function hasConsent(p: StudentProfile = loadProfile()): boolean {
+  return !!p.parent?.consentAt;
+}
+
+export function setParentConsent(email: string): StudentProfile {
+  const p = loadProfile();
+  p.parent = { email, consentAt: new Date().toISOString() };
+  saveProfile(p);
+  return p;
+}
+
+/** Datos básicos del onboarding. */
+export function setBasics(basics: {
+  name?: string;
+  age?: number;
+  gender?: Gender;
+  gradeLevel?: string;
+}): StudentProfile {
+  const p = loadProfile();
+  if (basics.name !== undefined) p.name = basics.name;
+  if (basics.age !== undefined) p.age = basics.age;
+  if (basics.gender !== undefined) p.gender = basics.gender;
+  if (basics.gradeLevel !== undefined) p.gradeLevel = basics.gradeLevel;
+  saveProfile(p);
+  return p;
+}
+
+export function setSubjects(subjects: Subject[]): StudentProfile {
+  const p = loadProfile();
+  p.subjects = subjects;
+  saveProfile(p);
+  return p;
+}
+
+export function setTutor(tutor: TutorConfig): StudentProfile {
+  const p = loadProfile();
+  p.tutor = tutor;
+  saveProfile(p);
+  return p;
+}
+
+/** Marca una asignatura como atascada → alimenta el puente a tutoría humana (T2). */
+export function flagNeedsHuman(subject: string): StudentProfile {
+  const p = loadProfile();
+  p.flags = p.flags ?? {};
+  const list = new Set(p.flags.needsHumanTutor ?? []);
+  list.add(subject);
+  p.flags.needsHumanTutor = [...list];
+  saveProfile(p);
+  return p;
+}
+
+/** Registra un "logro" para la pantalla Mi Semana. */
+export function addWin(win: string): StudentProfile {
+  const p = loadProfile();
+  p.wins = p.wins ?? [];
+  p.wins.push(win);
+  if (p.wins.length > 30) p.wins = p.wins.slice(-30);
+  saveProfile(p);
+  return p;
 }
 
 export function resetProfile(): void {
