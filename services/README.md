@@ -17,3 +17,25 @@ Plan completo y decisiones: [`../docs/plan-matematicas-rag.md`](../docs/plan-mat
 
 **Estado:** scaffolding pre-alfa. Cada servicio tiene la interfaz definida y stubs con `TODO`.
 Pre-alfa cubre solo **Matemáticas SL/HL (AI + AA)**; el diseño ya es multi-asignatura.
+
+## Corte vertical local (funciona de punta a punta, sin API keys)
+
+Requisitos: Ollama corriendo con `bge-m3`, y Postgres+pgvector con la migración aplicada
+(ver comandos en la conversación / `docs/plan-matematicas-rag.md`).
+
+```bash
+# 1) indexar el seed de 12 preguntas (embeddings locales → pgvector)
+cd services/rag-api
+pip install -e .
+python -m rag_api.index_seed ../../db/seed/math_sample.jsonl
+
+# 2) levantar la API de recuperación
+uvicorn rag_api.main:app --reload
+
+# 3) probar la búsqueda híbrida
+curl -s localhost:8000/rag/search -H 'content-type: application/json' \
+  -d '{"query":"cómo derivar una función polinómica","filters":{"subject":"math_aa"},"k":3}'
+```
+
+El seed son **preguntas originales** (`redistributable=true`). OpenStax y el agregador
+escribirán luego en estas mismas tablas reutilizando `index_seed._insert_chunk`.
