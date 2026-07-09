@@ -1,0 +1,21 @@
+[project]
+name = "ice-school-scraper"
+version = "0.1.0"
+description = "Ice School · recolección de fuentes (exámenes IB, libros, material abierto) para el RAG"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "selectolax>=0.3",
+    "playwright>=1.44",     # sitios con JS/login/paginación
+    "scrapy>=2.11",         # crawl a escala
+    "pyyaml>=6.0",
+    "pydantic>=2.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scraper"]

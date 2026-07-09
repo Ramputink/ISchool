@@ -1,0 +1,21 @@
+[project]
+name = "ice-school-ingestion"
+version = "0.1.0"
+description = "Ice School · normalización: PDF→texto, OCR de matemáticas→LaTeX, segmentación y embeddings"
+requires-python = ">=3.11"
+dependencies = [
+    "pymupdf>=1.24",        # extracción de texto/layout/figuras
+    "pdfplumber>=0.11",
+    "pydantic>=2.7",
+    "httpx>=0.27",          # cliente Mathpix / embeddings
+    # OCR de matemáticas: elegir uno en pre-alfa
+    #   open-source: "nougat-ocr", "pix2tex"
+    #   pago:        Mathpix (vía API HTTP, sin dep extra)
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ingestion"]

@@ -1,0 +1,24 @@
+# Catálogo de fuentes del RAG. Documenta procedencia y estatus legal de CADA una.
+# `redistributable: false` ⇒ solo grounding interno, el tutor NO reproduce verbatim.
+
+sources:
+  - name: openstax
+    connector: OpenStaxConnector
+    kind: textbook
+    license: CC-BY-4.0
+    redistributable: true
+    status: preferred            # base 'limpia' del corpus
+    subjects: [math_ai, math_aa]
+
+  - name: ib_aggregator
+    connector: IBAggregatorConnector
+    kind: past_papers
+    license: copyright
+    redistributable: false       # GUARDARRAÍL
+    status: grey_area            # decisión 2026-07-09: incluido con cautela
+    subjects: [math_ai, math_aa]
+    notes: >
+      Agregadores no oficiales (ibdocuments, drives r/IBO). Respetar robots.txt y
+      rate-limiting. Revisar con el socio antes de exponer contenido derivado.
+
+# Escalado futuro (fase post pre-alfa): physics, chemistry, biology...

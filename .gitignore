@@ -36,6 +36,18 @@ yarn-error.log*
 !.env.local.example
 !.env.example
 
+# corpus del RAG (no versionar: pesado y con material licenciado)
+/data/
+
+# python (services/)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
 # vercel
 .vercel
 
