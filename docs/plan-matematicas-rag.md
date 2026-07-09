@@ -239,8 +239,9 @@ grounding actualizado en `agentes/`.
 - ✅ Fuentes: **incluir agregadores** con guardarraíl `redistributable=false`.
 - ✅ Acción: **plan + scaffold del monorepo** (app Next.js se queda en la raíz).
 
-**Pendientes de confirmar (con recomendación por defecto):**
-- **Stack de datos:** por defecto **Postgres + pgvector (Supabase)**. ¿OK o prefieres Qdrant?
-- **OCR de mates:** por defecto empezar con **open-source (Nougat/pix2tex)** en pre-alfa y evaluar
-  **Mathpix** (pago) si la calidad no basta. ¿Hay presupuesto para Mathpix desde ya?
-- **Embeddings:** por defecto **Voyage AI** (`voyage-3-large`). ¿OK o prefieres OpenAI?
+**Stack local decidido (2026-07-09) — cero API keys, cero cloud:**
+- ✅ **Embeddings:** **`bge-m3` vía Ollama** (local, multilingüe, 1024 dims → coincide con `vector(1024)`).
+- ✅ **BD:** **Postgres + pgvector** local (Homebrew; Docker no instalado). Supabase free = despliegue futuro.
+- ✅ **OCR:** **open-source (Nougat/pix2tex)** local. Mathpix solo si se licencia más adelante.
+- ✅ **Python 3.10** (versión de la máquina); código ajustado (sin `StrEnum`).
+- **LLM del tutor:** en desarrollo, modelo local en Ollama (p. ej. `qwen2.5`); calidad de razonamiento a decidir.

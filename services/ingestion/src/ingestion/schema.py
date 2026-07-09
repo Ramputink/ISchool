@@ -4,19 +4,20 @@ Es el contrato entre ingestion → base de datos. Agnóstico de asignatura.
 """
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
 
-class Kind(StrEnum):
+# str+Enum (no StrEnum) para compatibilidad con Python 3.10
+class Kind(str, Enum):
     QUESTION = "question"
     MARKSCHEME = "markscheme"
     SOLUTION = "solution"
     CONCEPT = "concept"
 
 
-class SubjectGroup(StrEnum):
+class SubjectGroup(str, Enum):
     MATHEMATICS = "mathematics"
     SCIENCES = "sciences"
 

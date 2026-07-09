@@ -2,7 +2,7 @@
 name = "ice-school-scraper"
 version = "0.1.0"
 description = "Ice School · recolección de fuentes (exámenes IB, libros, material abierto) para el RAG"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27",
     "beautifulsoup4>=4.12",

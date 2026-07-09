@@ -2,7 +2,7 @@
 name = "ice-school-ingestion"
 version = "0.1.0"
 description = "Ice School · normalización: PDF→texto, OCR de matemáticas→LaTeX, segmentación y embeddings"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "pymupdf>=1.24",        # extracción de texto/layout/figuras
     "pdfplumber>=0.11",
